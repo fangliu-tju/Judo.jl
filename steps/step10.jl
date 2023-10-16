@@ -111,7 +111,7 @@ end
             x = Variable(rand(1))
             y = x.^2
             gradient!(y)
-            num_grad = numerical_diff(_square, x)
+            num_grad = numerical_diff(x->x.^2, x)
             @test allclose(x.grad, num_grad)
         end
         for i in 1:10
