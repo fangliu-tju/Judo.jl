@@ -5,7 +5,7 @@ mutable struct Variable
     value
     grad
 end
-# 两个外部构造函数，分别对应一个输入参数和零个输入参数
+# 两个外部构造函数， 分别对应一个输入参数和零个输入参数
 Variable(data) = Variable(data, nothing)
 Variable() = Variable(nothing, nothing)
 

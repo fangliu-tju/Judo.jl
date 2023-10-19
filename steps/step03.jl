@@ -13,7 +13,7 @@ end
 
 # Square
 mutable struct Square <: Func end
-(f::Square)(x::Variable) = f(x) do x
+(f::Square)(x::Variable) = f(x) do x # 以后都会使用匿名函数的方式
     x.^2
 end
 

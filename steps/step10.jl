@@ -40,7 +40,7 @@ _square(x) = Square()(x) do t
 end                            
 
 # 为已有函数创建新方法
-Base.Broadcast.broadcasted(::typeof(Base.literal_pow), ::typeof(^), x::Variable, ::Val{2}) = _square(x)
+Base.:^(x::Variable, c) = _square(x)
 
 # 求导
 function ∇(f::Square, gy)  
@@ -58,7 +58,7 @@ end
 Exp() = Exp(nothing, nothing)
 
 # 求值
-_exp(x) = Exp()(x) do x       # 定义的函数以 `_` 开头， 提示它是内部函数， 不直接使用
+_exp(x) = Exp()(x) do x  # 定义的函数以 `_` 开头， 提示它是内部函数， 不直接使用
     exp.(x)
 end
 
@@ -72,7 +72,7 @@ function ∇(f::Exp, gy)
 end
 
 function gradient!(v::Variable)
-    isnothing(v.grad) && (v.grad = ones(eltype(v.value), size(v.value))) # 同类型同形状
+    isnothing(v.grad) && (v.grad = one.(v.value))
     funcs = Func[] 
     f = v.creator     
     isnothing(f) && return 
@@ -103,15 +103,15 @@ end
     # Square
     @testset "evaluation" begin
         x = Variable([2.0])
-        y = x.^2
+        y = x^2
         @test y.value == [4.0]
     end
     @testset "gradient" begin
         function test_grad_check()
             x = Variable(rand(1))
-            y = x.^2
+            y = x^2
             gradient!(y)
-            num_grad = numerical_diff(x->x.^2, x)
+            num_grad = numerical_diff(x->x^2, x)
             @test allclose(x.grad, num_grad)
         end
         for i in 1:10

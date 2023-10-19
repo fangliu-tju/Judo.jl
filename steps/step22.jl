@@ -90,33 +90,33 @@ end
 
 # ElAdd
 #创建
-@createfunc ElAdd
+@createfunc Add
 # 求值
-_eladd(x, y) = ElAdd()(x, y) do x, y  
+_add(x, y) = Add()(x, y) do x, y  
     x .+ y
 end                            
 # 为已有函数创建新方法
-Base.Broadcast.broadcasted(::typeof(+), x::Variable, y::Variable) = _eladd(x, y)
-Base.Broadcast.broadcasted(::typeof(+), x, y::Variable) = _eladd(x, y) 
-Base.Broadcast.broadcasted(::typeof(+), x::Variable, y) = _eladd(x, y) 
+Base.:+(x::Variable, y::Variable) = _add(x, y)
+Base.:+(x, y::Variable) = _add(x, y) 
+Base.:+(x::Variable, y) = _add(x, y) 
 # 求局部导数
-function ∇(f::ElAdd, gy)  
+function ∇(f::Add, gy)  
     gy, gy    
 end
 
-# Square
+# Mul
 # 创建
-@createfunc ElMul
+@createfunc Mul
 # 求值
-_elmul(x, y) = ElMul()(x, y) do x, y
+_mul(x, y) = Mul()(x, y) do x, y
     x .* y
 end
 # 为已有函数创建新方法
-Base.Broadcast.broadcasted(::typeof(*), x::Variable, y::Variable) = _elmul(x, y) 
-Base.Broadcast.broadcasted(::typeof(*), x::Variable, y) = _elmul(x, y) 
-Base.Broadcast.broadcasted(::typeof(*), x, y::Variable) = _elmul(x, y) 
+Base.:*(x::Variable, y::Variable) = _mul(x, y) 
+Base.:*(x::Variable, y) = _mul(x, y) 
+Base.:*(x, y::Variable) = _mul(x, y) 
 # 求局部导数
-function ∇(f::ElMul, gy)
+function ∇(f::Mul, gy)
     x1, x2 = f.inputs
     gy .* x2.value, gy .* x1.value
 end
@@ -133,53 +133,52 @@ Base.:-(x::Variable) = _neg(x)
 # 4、求导
 ∇(f::Neg, gy) = -gy
 
-# ElSub
+# Sub
 # 1、创建
-@createfunc ElSub
+@createfunc Sub
 # 2、求值
-_elsub(x, y) = ElSub()(x, y) do x, y
+_sub(x, y) = Sub()(x, y) do x, y
     x .- y
 end
 # 3、扩展
-Base.Broadcast.broadcasted(::typeof(-), x::Variable, y::Variable) = _elsub(x, y)
-Base.Broadcast.broadcasted(::typeof(-), x::Variable, y) = _elsub(x, y)
-Base.Broadcast.broadcasted(::typeof(-), x, y::Variable) = _elsub(x, y)
+Base.:-(x::Variable, y::Variable) = _sub(x, y)
+Base.:-(x::Variable, y) = _sub(x, y)
+Base.:-(x, y::Variable) = _sub(x, y)
 # 4、求导
-function ∇(f::ElSub, gy) 
+function ∇(f::Sub, gy) 
     gy, -gy
 end
 
-# ElDiv
+# Div
 # 1、创建
-@createfunc ElDiv
+@createfunc Div
 # 2、求值
-_eldiv(x, y) = ElDiv()(x, y) do x, y
+_div(x, y) = Div()(x, y) do x, y
     x ./ y
 end
 # 3、扩展
-Base.Broadcast.broadcasted(::typeof(/), x::Variable, y::Variable) = _eldiv(x, y)
-Base.Broadcast.broadcasted(::typeof(/), x::Variable, y) = _eldiv(x, y)
-Base.Broadcast.broadcasted(::typeof(/), x, y::Variable) = _eldiv(x, y)
+Base.:/(x::Variable, y::Variable) = _div(x, y)
+Base.:/(x::Variable, y) = _div(x, y)
+Base.:/(x, y::Variable) = _div(x, y)
 # 4、求导
-function ∇(f::ElDiv, gy) 
+function ∇(f::Div, gy) 
     x1, x2 = f.inputs
     gx1 = gy ./ x2.value
     gx2 = gy .* (-x1.value ./ x2.value.^2)
     return gx1, gx2
 end
 
-# ElPow
+# Pow
 # 1、创建
-@createfunc ElPow c::Real
+@createfunc Pow c::Real
 # 2、求值
-_elpow(x, c) = ElPow(c)(x) do x
+_pow(x, c) = Pow(c)(x) do x
     x .^c
 end
 # 3、扩展
-Base.Broadcast.broadcasted(::typeof(Base.literal_pow), ::typeof(^), x::Variable, ::Val{c}) where c = _elpow(x, c)
-Base.Broadcast.broadcasted(::typeof(^), x::Variable, c) = _elpow(x, c)
+Base.:^(x::Variable, c) = _pow(x, c)
 # 4、求导
-∇(f::ElPow, gy) = f.c .* f.inputs[1].value .^(f.c - 1) .* gy
+∇(f::Pow, gy) = f.c .* f.inputs[1].value .^(f.c - 1) .* gy
 
 # 求整体导数
 function gradient!(v::Variable; retain_grad=false) 
@@ -217,7 +216,7 @@ cleargrad!(v::Variable) = (v.grad = nothing)
 
 # main
 x = Variable(2.0)
-y = @. (x^3 - x) / $(-x)
+y = (x^3 - x) / -x
 
 gradient!(y)
 println(y.value)

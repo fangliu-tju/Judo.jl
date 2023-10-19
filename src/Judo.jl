@@ -1,5 +1,10 @@
 module Judo
 
-# Write your package code here.
+export 
+    # core
+    Variable, gradient!, cleargrad!,
+    @inference, @createfunc
+
+include("core.jl")
 
 end

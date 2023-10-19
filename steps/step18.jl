@@ -69,7 +69,7 @@ _add(x1, x2) = Add()(x1, x2) do x1, x2
 end                            
 
 # 为已有函数创建新方法
-Base.Broadcast.broadcasted(::typeof(+), x1::Variable, x2::Variable) = _add(x1, x2) 
+Base.:+(x1::Variable, x2::Variable) = _add(x1, x2) 
 
 # 求局部导数
 function ∇(f::Add, gy)  
@@ -92,7 +92,7 @@ _square(x) = Square()(x) do x
 end
 
 # Dispatch
-Base.Broadcast.broadcasted(::typeof(Base.literal_pow), ::typeof(^), x::Variable, ::Val{2}) = _square(x)
+Base.:^(x::Variable, c) = _square(x)
 
 # Local Gradient
 function ∇(f::Square, gy)  
@@ -137,15 +137,15 @@ cleargrad!(v::Variable) = (v.grad = nothing)
 
 # main
 x = Variable([2.0])
-a = x.^2
-y = a.^2 .+ a.^2
+a = x^2
+y = a^2 + a^2
 gradient!(y,retain_grad=true)  # 默认不保留中间结果的梯度
 
 @show a.grad
 @show x.grad
 
-@inference y = x.^2 # 推理计算， 只对模型给出的结果感兴趣， 不用来进行模型训练
+@inference y = x^2 # 推理计算， 只对模型给出的结果感兴趣， 不用来进行模型训练
 @show y.creator
 
-y = x.^2         # 普通计算， 默认是要用来训练的
+y = x^2         # 普通计算， 默认是要用来训练的
 @show y.creator;

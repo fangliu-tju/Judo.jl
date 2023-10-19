@@ -1,14 +1,14 @@
-# step20
+# core
 
 # Config
-const enable_grad = Ref(true) # 全局常数， 控制求值的同时建不建立联系
+const enable_grad = Ref(true) 
 
-# 定义一个宏， 当做推理运算时， 不建立函数与变量之间的相互联系
+
 macro inference(ex)
     quote
         enable_grad[] = false
         local val = Base.@__tryfinally($(esc(ex)),
-        enable_grad[] = true);  # 当 `ex` 出错时， `enable_grad` 也设置为 `true` 
+        enable_grad[] = true);  
         val
     end
 end
@@ -18,8 +18,8 @@ mutable struct Variable
     grad
     creator
     generation 
-    name       # 增加了名字域
-    # 重新定义了内部构造函数, 只接受两个参数
+    name       
+    
     function Variable(data::AbstractArray; name=nothing)  
         v = new(data)
         v.grad = nothing
@@ -31,7 +31,7 @@ mutable struct Variable
 end
 Variable(data::Number; name=nothing) = Variable([data], name=name)
 
-# 为新构建的数据类型， 扩展常用函数的方法
+
 Base.ndims(v::Variable) = ndims(v.value)
 Base.size(v::Variable) = size(v.value)
 Base.size(v::Variable, i) = size(v.value, i)
@@ -41,11 +41,14 @@ Base.show(io::IO, v::Variable) = println(io, "Variable(", v.value, ")")
 function Base.show(io::IO, ::MIME"text/plain", v::Variable) 
     println(io, "Variable\n", v.value)
 end
-
+Base.convert(::Type{Variable},x::Variable) = x
+Base.convert(::Type{Variable},x) = Variable(x)
+Base.iterate(x::Variable) = (x, nothing)
+Base.iterate(x::Variable, ::Any) = nothing
 abstract type Func end  
 
-# 由于函数类型迅速增加， 每次都手动设置十分耗时， 因此创建一个宏， 用来快速创建函数类型
-macro createfunc(name, arg...) # `name` 是函数类型名， `arg` 是共同域以外的独有域
+
+macro createfunc(name, arg...) 
     return quote
         mutable struct $(esc(name)) <: Func
             $(arg...)
@@ -59,19 +62,20 @@ macro createfunc(name, arg...) # `name` 是函数类型名， `arg` 是共同域
 end
 
 function (f::Func)(fun, inputs...)
-    xs = [input.value for input in inputs]   
+    inputs = map(x->convert(Variable,x), inputs) 
+    xs = [input.value for input in inputs] 
     ys = fun(xs...)   
     !isa(ys, Tuple) && (ys = tuple(ys))
     outputs = Variable.(ys) 
 
     if enable_grad[] 
-        # 从函数的视角， 建立起与变量的联系
+
         f.inputs = inputs       
         f.outputs = outputs
-        # 设置函数的辈分
+
         f.generation = mapreduce(x->x.generation, max, inputs) 
         
-        # 从变量的视角， 建立起与函数的联系
+
         for output in outputs 
             setcreator!(output, f) 
         end
@@ -85,7 +89,8 @@ function setcreator!(v::Variable, func::Func)
     v.generation = func.generation + 1 
 end
 
-# ElAdd
+# 由于广播会有很多问题， 调试很麻烦， 所以这里对运算符进行了重写， 不使用广播功能， 可实现需要的功能
+# Add
 #创建
 @createfunc Add
 # 求值
@@ -94,29 +99,91 @@ _add(x, y) = Add()(x, y) do x, y
 end                            
 # 为已有函数创建新方法
 Base.:+(x::Variable, y::Variable) = _add(x, y)
+Base.:+(x, y::Variable) = _add(x, y) 
+Base.:+(x::Variable, y) = _add(x, y) 
 # 求局部导数
 function ∇(f::Add, gy)  
     gy, gy    
 end
 
-# Square
+# Mul
 # 创建
 @createfunc Mul
 # 求值
-_mul(x1, x2) = Mul()(x1, x2) do x1, x2
-    x1 .* x2
+_mul(x, y) = Mul()(x, y) do x, y
+    x .* y
 end
 # 为已有函数创建新方法
-Base.:*(x1::Variable, x2::Variable) = _mul(x1, x2) 
+Base.:*(x::Variable, y::Variable) = _mul(x, y) 
+Base.:*(x::Variable, y) = _mul(x, y) 
+Base.:*(x, y::Variable) = _mul(x, y) 
 # 求局部导数
 function ∇(f::Mul, gy)
     x1, x2 = f.inputs
     gy .* x2.value, gy .* x1.value
 end
+# Neg
+# 1、创建
+@createfunc Neg
+# 2、求值
+_neg(x) = Neg()(x) do x
+    -x
+end
+# 3、扩展
+Base.:-(x::Variable) = _neg(x)
+# 4、求导
+∇(f::Neg, gy) = -gy
+
+# Sub
+# 1、创建
+@createfunc Sub
+# 2、求值
+_sub(x, y) = Sub()(x, y) do x, y
+    x .- y
+end
+# 3、扩展
+Base.:-(x::Variable, y::Variable) = _sub(x, y)
+Base.:-(x::Variable, y) = _sub(x, y)
+Base.:-(x, y::Variable) = _sub(x, y)
+# 4、求导
+function ∇(f::Sub, gy) 
+    gy, -gy
+end
+
+# Div
+# 1、创建
+@createfunc Div
+# 2、求值
+_div(x, y) = Div()(x, y) do x, y
+    x ./ y
+end
+# 3、扩展
+Base.:/(x::Variable, y::Variable) = _div(x, y)
+Base.:/(x::Variable, y) = _div(x, y)
+Base.:/(x, y::Variable) = _div(x, y)
+# 4、求导
+function ∇(f::Div, gy) 
+    x1, x2 = f.inputs
+    gx1 = gy ./ x2.value
+    gx2 = gy .* (-x1.value ./ x2.value.^2)
+    return gx1, gx2
+end
+
+# Pow
+# 1、创建
+@createfunc Pow c::Real
+# 2、求值
+_pow(x, c) = Pow(c)(x) do x
+    x .^c
+end
+# 3、扩展
+Base.:^(x::Variable, c)  = _pow(x, c)
+# 4、求导
+∇(f::Pow, gy) = f.c .* f.inputs[1].value .^(f.c - 1) .* gy
 
 # 求整体导数
-function gradient!(v::Variable; retain_grad=false) # 新增关键字参数 `retain_grad`
-    isnothing(v.grad) && (v.grad = one.(v.value)) # 改写， 使代码更简洁
+function gradient!(v::Variable; retain_grad=false) 
+    isnothing(v.grad) && (v.grad = one.(v.value)) 
     funcs = Func[] 
     seen_set = Set() 
     
@@ -140,23 +207,10 @@ function gradient!(v::Variable; retain_grad=false) # 新增关键字参数 `reta
             x.grad = (isnothing(x.grad) ? zero(gx) : x.grad) + gx
             !isnothing(x.creator) && addfunc(x.creator) 
         end
-        # 决定是否保留中间导数， 不管保留与否， 变量与函数之间的相互联系还是建立的
+        
         retain_grad || [output.grad = nothing for output in f.outputs]
 
     end
 end
 
 cleargrad!(v::Variable) = (v.grad = nothing)
-
-# main
-a = Variable(3.0)
-b = Variable(2.0)
-c = Variable(1.0)
-
-y = a * b + c
-
-gradient!(y)
-
-println(y)
-println(a.grad)
-println(b.grad)

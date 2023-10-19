@@ -91,33 +91,33 @@ end
 
 # ElAdd
 #创建
-@createfunc ElAdd
+@createfunc Add
 # 求值
-_eladd(x, y) = ElAdd()(x, y) do x, y  
+_add(x, y) = Add()(x, y) do x, y  
     x .+ y
 end                            
 # 为已有函数创建新方法
-Base.Broadcast.broadcasted(::typeof(+), x::Variable, y::Variable) = _eladd(x, y)
-Base.Broadcast.broadcasted(::typeof(+), x, y::Variable) = _eladd(x, y) # 新增
-Base.Broadcast.broadcasted(::typeof(+), x::Variable, y) = _eladd(x, y) # 新增
+Base.:+(x::Variable, y::Variable) = _add(x, y)
+Base.:+(x, y::Variable) = _add(x, y) # 新增
+Base.:+(x::Variable, y) = _add(x, y) # 新增
 # 求局部导数
-function ∇(f::ElAdd, gy)  
+function ∇(f::Add, gy)  
     gy, gy    
 end
 
 # Square
 # 创建
-@createfunc ElMul
+@createfunc Mul
 # 求值
-_elmul(x, y) = ElMul()(x, y) do x, y
+_mul(x, y) = Mul()(x, y) do x, y
     x .* y
 end
 # 为已有函数创建新方法
-Base.Broadcast.broadcasted(::typeof(*), x::Variable, y::Variable) = _elmul(x, y) 
-Base.Broadcast.broadcasted(::typeof(*), x::Variable, y) = _elmul(x, y) # 新增
-Base.Broadcast.broadcasted(::typeof(*), x, y::Variable) = _elmul(x, y) # 新增
+Base.:*(x::Variable, y::Variable) = _mul(x, y) 
+Base.:*(x::Variable, y) = _mul(x, y) # 新增
+Base.:*(x, y::Variable) = _mul(x, y) # 新增
 # 求局部导数
-function ∇(f::ElMul, gy)
+function ∇(f::Mul, gy)
     x1, x2 = f.inputs
     gy .* x2.value, gy .* x1.value
 end
@@ -158,8 +158,8 @@ cleargrad!(v::Variable) = (v.grad = nothing)
 
 # main
 x = Variable(2.0)
-y = x .+ [3.0]
+y = x + [3.0]
 println(y)
 
-y =@. 3.0 * x + 1.0
+y = 3.0 * x + 1.0
 println(y)

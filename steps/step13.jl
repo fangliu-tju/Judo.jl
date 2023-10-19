@@ -39,7 +39,7 @@ _add(x1, x2) = Add()(x1, x2) do x1, x2
 end                            
 
 # 为已有函数创建新方法
-Base.Broadcast.broadcasted(::typeof(+), x1::Variable, x2::Variable) = _add(x1, x2) 
+Base.:+(x1::Variable, x2::Variable) = _add(x1, x2) 
 
 # 求局部导数
 function ∇(f::Add, gy)  
@@ -61,7 +61,7 @@ _square(x) = Square()(x) do x
 end
 
 # Dispatch
-Base.Broadcast.broadcasted(::typeof(Base.literal_pow), ::typeof(^), x::Variable, ::Val{2}) = _square(x)
+Base.:^(x::Variable, c) = _square(x)
 
 # Gradient
 function ∇(f::Square, gy)  
@@ -71,7 +71,7 @@ end
 
 # 求整体导数
 function gradient!(v::Variable)
-    isnothing(v.grad) && (v.grad = ones(eltype(v.value), size(v.value))) # 与值同形状的梯度
+    isnothing(v.grad) && (v.grad = one.(v.value))
     funcs = Func[] 
     f = v.creator     
     isnothing(f) && return 
@@ -91,7 +91,7 @@ end
 # main
 x = Variable([2.0, 3.0])
 y = Variable([3.0])
-z = x.^2 .+ y.^2
+z = x^2 + y^2
 gradient!(z)
 println(z.value)
 println(x.grad)
