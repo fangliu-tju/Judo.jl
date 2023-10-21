@@ -66,11 +66,11 @@ end
 
 # 实现函数求值， 及在这个过程中建立起函数和变量之间的相互联系
 function (f::Func)(fun, inputs...)
-    inputs = convert.(Variable, inputs) 
+    inputs = map(x->convert(Variable,x), inputs) 
     xs = [input.value for input in inputs] 
     ys = fun(xs...)   
-    isa(ys, Tuple) || (ys = tuple(ys))
-    outputs = convert.(Variable, ys) 
+    !isa(ys, Tuple) && (ys = tuple(ys))
+    outputs = Variable.(ys) 
 
     if enable_grad[] 
 
@@ -119,8 +119,8 @@ Base.:*(x, y::Variable) = _mul(x, y)
 # 4、求导
 function ∇(f::Mul, gy)
     x1, x2 = f.inputs
-    gy * x2, gy * x1    # 这里的计算已经是针对 `Variable` 的了
-end                     # 只有对 `Variable` 的计算， 才能在求值时建立起联系
+    gy .* x2.value, gy .* x1.value
+end
 # Neg
 # 1、创建
 @createfunc Neg
@@ -163,8 +163,8 @@ Base.:/(x, y::Variable) = _div(x, y)
 # 4、求导
 function ∇(f::Div, gy) 
     x1, x2 = f.inputs
-    gx1 = gy / x2
-    gx2 = gy * (-x1 / x2^2)
+    gx1 = gy ./ x2.value
+    gx2 = gy .* (-x1.value ./ x2.value.^2)
     return gx1, gx2
 end
 
@@ -178,12 +178,11 @@ end
 # 3、扩展
 Base.:^(x::Variable, c)  = _pow(x, c)
 # 4、求导
-∇(f::Pow, gy) = f.c * f.inputs[1]^(f.c - 1) * gy
+∇(f::Pow, gy) = f.c .* f.inputs[1].value .^(f.c - 1) .* gy
 
 # 求整体导数
 function gradient!(v::Variable; retain_grad=false) 
-    # 将梯度转换成 `Variable` 类型
-    hasgrad(v) || (v.grad = convert(Variable, one.(v.value))) 
+    hasgrad(v) || (v.grad = one.(v.value)) 
     funcs = Func[] 
     seen_set = Set() 
     
@@ -195,27 +194,21 @@ function gradient!(v::Variable; retain_grad=false)
         end
     end
 
-    hascreator(v) || error("Variable MUST be created by some function") 
+    hascreator(v) || error("Variable MUST be created by some function")
     addfunc(v.creator)     
      
     while !isempty(funcs)
         f = pop!(funcs)    
         gys = [output.grad for output in f.outputs] 
-        #----------------------------------------------------------
-        # 这部分是导数的求值过程， 配合 `@inference` 宏， 这部分基本不用修改 
-        gxs = ∇(f, gys...) # 求输入参数的导数
-        isa(gxs, Tuple) || (gxs = tuple(gxs)) 
-        # 对导数进行分配， 然后自动配置下一步求导过程
+        gxs = ∇(f, gys...) 
+        !isa(gxs, Tuple) && (gxs = tuple(gxs)) 
         for (x, gx) in zip(f.inputs, gxs)
-            if hasgrad(x)
-                x.grad += gx
-            else
-                x.grad = gx
-            end
-            hascreator(x) && addfunc(x.creator) 
+            x.grad = (hasgrad(x) ? x.grad : zero(gx)) + gx
+            !isnothing(x.creator) && addfunc(x.creator) 
         end
-        #-----------------------------------------------------------
-        retain_grad || cleargrad!.(f.outputs)
+        
+        retain_grad || [output.grad = nothing for output in f.outputs]
+
     end
 end
 

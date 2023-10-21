@@ -1,6 +1,7 @@
 # step24
 
-using Judo
+include("../src/core_simple.jl")
+include("../src/utils.jl")
 
 function test(f)
     x = Variable([1.0])

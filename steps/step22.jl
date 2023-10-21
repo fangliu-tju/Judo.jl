@@ -88,7 +88,7 @@ function setcreator!(v::Variable, func::Func)
     v.generation = func.generation + 1 
 end
 
-# ElAdd
+# Add
 #创建
 @createfunc Add
 # 求值
