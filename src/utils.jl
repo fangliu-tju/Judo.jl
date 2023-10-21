@@ -91,7 +91,7 @@ function plot_dot_graph(output; verbose=false, file="graph.png")
 end
 
 # ===================================================================
-# 
+# sumto / broadcatto
 # ===================================================================
 function sumto(x::Variable, shape)
     size(x) == shape && return x
@@ -105,7 +105,7 @@ function sumto(x::Variable, shape)
     return sum(x, dims=dims)
 end
 
-broadcastto(x::Variable, shape) = size(x) == shape ? x : x .+ zeros(eltype(x),shape)
+broadcastto(x::Variable, shape) = size(x) == shape ? x : x + zeros(eltype(x),shape)
 
 mean_squared_error(x1, x2) = sum((x1-x2).^2) ./ length(x1)
 

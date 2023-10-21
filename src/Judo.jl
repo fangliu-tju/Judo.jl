@@ -2,7 +2,7 @@ module Judo
 
 export 
     # core
-    Variable, gradient!, cleargrad!,
+    Variable, gradient!, cleargrad!, ⋅,
     @inference, @createfunc,
     # utils
     plot_dot_graph

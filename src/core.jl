@@ -76,7 +76,7 @@ function (f::Func)(fun, inputs...)
 
         f.inputs = inputs       
         f.outputs = outputs
-
+        f.x_shape = length(inputs) == 1 ? size(inputs[1]) : size.(inputs) #参数形状
         f.generation = mapreduce(x->x.generation, max, inputs) 
         
 

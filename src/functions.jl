@@ -33,22 +33,28 @@ end
 ∇(f::Tanh, gy) = gy * (1 - f.outputs[1]^2)
 
 # Exp
+# 1、创建
 @createfunc Exp
+# 2、求值+3、扩展
 Base.exp(x::Variable) = Exp()(x) do x
-    exp.(x.data)
+    exp.(x)
 end
-backward(f::Exp, gy) = gy .* f.outputs[1]
+# 4、求导
+∇(f::Exp, gy) = gy * f.outputs[1]
 
 # Log
+# 1、创建
 @createfunc Log
+# 2、求值+3、扩展
 Base.log(x::Variable) = Log()(x) do x
-    log.(x.data)
+    log.(x)
 end
-backward(f::Log, gy) = gy ./ f.inputs[1]
+# 4、求导
+∇(f::Log, gy) = gy / f.inputs[1]
 
-# =============================================================================
+# ===================================================================
 # Tensor operations: reshape / transpose / get_item / expand_dims / flatten
-# =============================================================================
+# ===================================================================
 
 # Reshape
 @createfunc Reshape shape::Tuple
@@ -64,35 +70,60 @@ end
 backward(f::Reshape, gy) = reshape(gy, f.x_shape)
 
 # Transpose
+# 1、创建
 @createfunc Transpose
+# 2、求值+3、扩展
 Base.transpose(x::Variable) = Transpose()(x) do x
-    transpose(x.data)
+    transpose(x)
 end
-backward(f::Transpose, gy) = transpose(gy)
+# 4、求导
+∇(f::Transpose, gy) = transpose(gy)
 
 # Adjoint
+# 1、创建
 @createfunc Adjoint
+# 2、求值+3、扩展
 Base.adjoint(x::Variable) = Adjoint()(x) do x
-    adjoint(x.data)
+    adjoint(x)
 end
-backward(f::Adjoint, gy) = adjoint(gy) # ???
+# 4、求导
+∇(f::Adjoint, gy) = adjoint(gy) # ???
 
 
-# =============================================================================
-# sum / sum_to / broadcast_to / average / matmul / linear /max
-# =============================================================================
+# ===================================================================
+# sum / average / matmul / linear /max
+# ===================================================================
 
 # Sum
-@createfunc Sum dims::Union{Int,Tuple,Nothing}
-backward(f::Sum, gy) = broadcastto(gy, f.x_shape)
-Base.sum(x::Variable; dims=nothing) = Sum(dims)(x) do x
-    if dims isa Nothing
-        y = sum(x.data)
-    else
-        y = sum(x.data, dims=dims)
-    end
-    return y
+# 1、创建 
+@createfunc Sum dims
+# 2、求值+3、扩展
+Base.sum(x::Variable; dims=:) = Sum(dims)(x) do x
+    sum(x, dims=dims)
 end
+# 4、求导
+∇(f::Sum, gy) = broadcastto(gy, f.x_shape)
+
+# MatMul
+# 1、创建 
+@createfunc MatMul
+# 2、求值+3、扩展
+matmul(W, x) = MatMul()(W, x) do W, x
+    W = length(W) == 1 ? W[1] : W # 当数值只有一个元素时， 取出该值
+    x = length(x) == 1 ? x[1] : x # 这样可以防止向量乘以向量的错误
+    W * x
+end
+⋅(A::Variable, B::Variable) = matmul(A, B)
+⋅(A::Variable, B) = matmul(A, B)
+⋅(A, B::Variable) = matmul(A, B)
+# 4、求导
+function ∇(f::MatMul, gy)
+    W, x = f.inputs
+    gW = gy ⋅ x'
+    gx = W' ⋅ gy
+    return gW, gx
+end
+
     
 # Max
 @createfunc Max
