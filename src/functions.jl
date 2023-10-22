@@ -57,9 +57,11 @@ end
 # ===================================================================
 
 # Reshape
+# 1、创建
 @createfunc Reshape shape::Tuple
+# 2、求值+3、扩展
 Base.reshape(x::Variable, shape::Tuple) = size(x) == shape ? x : Reshape(shape)(x) do x
-    reshape(x.data, shape)
+    reshape(x, shape)
 end
 function Base.reshape(x::Variable, shape...) 
     if length(shape) == 1 && shape[1] isa Union{Tuple,Array}
@@ -67,17 +69,19 @@ function Base.reshape(x::Variable, shape...)
     end
     return reshape(x,tuple(shape...))
 end
-backward(f::Reshape, gy) = reshape(gy, f.x_shape)
-
-# Transpose
-# 1、创建
-@createfunc Transpose
-# 2、求值+3、扩展
-Base.transpose(x::Variable) = Transpose()(x) do x
-    transpose(x)
-end
 # 4、求导
-∇(f::Transpose, gy) = transpose(gy)
+∇(f::Reshape, gy) = reshape(gy, f.x_shape)
+
+# Permutedims
+# 1、创建
+@createfunc Permutedims shape::Tuple
+# 2、求值+3、扩展
+Base.permutedims(x::Variable, shape::Tuple) = Permutedims(shape)(x) do x
+    permutedims(x, shape)
+end
+Base.permutedims(x::Variable,shape::AbstractArray) = permutedims(x, Tuple(shape))
+# 4、求导
+∇(f::Permutedims, gy) = permutedims(gy, invperm(f.shape))
 
 # Adjoint
 # 1、创建
@@ -87,7 +91,7 @@ Base.adjoint(x::Variable) = Adjoint()(x) do x
     adjoint(x)
 end
 # 4、求导
-∇(f::Adjoint, gy) = adjoint(gy) # ???
+∇(f::Adjoint, gy) = adjoint(gy) 
 
 
 # ===================================================================
