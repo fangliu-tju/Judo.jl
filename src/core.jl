@@ -182,6 +182,8 @@ Base.:^(x::Variable, c)  = _pow(x, c)
 
 # 求整体导数
 function gradient!(v::Variable; retain_grad=false) 
+    # 非函数创建的变量，不求导
+    hascreator(v) || return 
     # 将梯度转换成 `Variable` 类型
     hasgrad(v) || (v.grad = convert(Variable, one.(v.value))) 
     funcs = Func[] 
@@ -195,7 +197,6 @@ function gradient!(v::Variable; retain_grad=false)
         end
     end
 
-    hascreator(v) || error("Variable MUST be created by some function") 
     addfunc(v.creator)     
      
     while !isempty(funcs)
