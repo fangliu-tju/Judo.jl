@@ -13,8 +13,16 @@ macro inference(ex)
     end
 end
 
+# 定义抽象数据类型， 方便代码复用
+abstract type AbstractVar end
+
+# 设置不同的变量类型
+struct Variable <: AbstractVar end  # 一般变量， 主要作为目标值, 需要求导
+struct Parameter <: AbstractVar end # 参数变量， 对应模型， 需要优化
+struct Literal <: AbstractVar end   # 一般为常数， 或明确不需要求导的量
+
 # 核心数据结构， 使变量具备自动微分属性
-mutable struct Variable
+mutable struct Var{T<:AbstractVar}
     value       # 变量的取值
     grad        # 上游变量对该变量的导数值
     creator     # 该变量的创建函数
@@ -22,30 +30,20 @@ mutable struct Variable
     name        # 该变量的名字
     
     # 内部构造函数， 覆盖默认构造函数
-    function Variable(data::AbstractArray; name=nothing)  
-        v = new(data)
+    function Var{T}(data::AbstractArray, name) where T   
+        v = new{T}(data)
         v.grad = nothing
         v.creator = nothing
         v.generation = 1
         v.name = name
         return v
     end
+    Var{T}(data::Number, name) where T = Var{T}([data], name)
 end
-# 外部构造函数
-Variable(data::Number; name=nothing) = Variable([data], name=name)
-
-# 针对新数据类型， 扩展已有函数的方法
-Base.ndims(v::Variable) = ndims(v.value)
-Base.size(v::Variable) = size(v.value)
-Base.size(v::Variable, i) = size(v.value, i)
-Base.eltype(v::Variable)  = eltype(v.value)
-Base.length(v::Variable) = length(v.value)
-Base.show(io::IO, v::Variable) = println(io, "Variable(", v.value, ")")
-function Base.show(io::IO, ::MIME"text/plain", v::Variable) 
-    println(io, "Variable\n", v.value)
+# 外部构造函数， 使用循环， 方便添加变量类型
+for f in (:Variable, :Parameter, :Literal)
+    @eval ($f)(data; name=nothing) = Var{($f)}(data, name)
 end
-Base.convert(::Type{Variable},x::Variable) = x
-Base.convert(::Type{Variable},x) = Variable(x)
 
 # 核心数据结构， 使函数具备自动微分属性
 abstract type Func end  
@@ -66,12 +64,14 @@ end
 
 # 实现函数求值， 及在这个过程中建立起函数和变量之间的相互联系
 function (f::Func)(fun, inputs...)
-    inputs = convert.(Variable, inputs) 
+    inputs = asvariable.(inputs) 
     xs = [input.value for input in inputs] 
     ys = fun(xs...)   
     isa(ys, Tuple) || (ys = tuple(ys))
-    outputs = convert.(Variable, ys) 
 
+    R = promote_type(typeof.(inputs)...)
+    outputs = convert.(R, ys)
+    
     if enable_grad[] 
 
         f.inputs = inputs       
@@ -97,12 +97,17 @@ _add(x, y) = Add()(x, y) do x, y
     x .+ y
 end                            
 # 3、 扩展
-Base.:+(x::Variable, y::Variable) = _add(x, y)
-Base.:+(x, y::Variable) = _add(x, y) 
-Base.:+(x::Variable, y) = _add(x, y) 
+Base.:+(x::Var, y::Var) = _add(x, y)
+Base.:+(x, y::Var) = _add(x, y) 
+Base.:+(x::Var, y) = _add(x, y) 
 # 4、求导
 function ∇(f::Add, gy)  
-    gy, gy    
+    gx1, gx2 = gy, gy
+    if f.x_shape[1] != f.x_shape[2]    # 解决了广播计算， 导数维数不对的问题
+        gx1 = sumto(gx1, f.x_shape[1])
+        gx2 = sumto(gx2, f.x_shape[2])
+    end
+    return gx1, gx2    
 end
 
 # Mul
@@ -113,14 +118,20 @@ _mul(x, y) = Mul()(x, y) do x, y
     x .* y
 end
 # 3、扩展
-Base.:*(x::Variable, y::Variable) = _mul(x, y) 
-Base.:*(x::Variable, y) = _mul(x, y) 
-Base.:*(x, y::Variable) = _mul(x, y) 
+Base.:*(x::Var, y::Var) = _mul(x, y) 
+Base.:*(x::Var, y) = _mul(x, y) 
+Base.:*(x, y::Var) = _mul(x, y) 
 # 4、求导
 function ∇(f::Mul, gy)
     x1, x2 = f.inputs
-    gy * x2, gy * x1    # 这里的计算已经是针对 `Variable` 的了
-end                     # 只有对 `Variable` 的计算， 才能在求值时建立起联系
+    gx1 = gy * x2
+    gx2 = gy * x1
+    if f.x_shape[1] != f.x_shape[2]
+        gx1 = sumto(gx1, f.x_shape[1])
+        gx2 = sumto(gx2, f.x_shape[2])
+    end
+    return gx1, gx2
+end    # 只有对 `Var` 的计算， 才能在求值时建立起联系
 # Neg
 # 1、创建
 @createfunc Neg
@@ -129,7 +140,7 @@ _neg(x) = Neg()(x) do x
     -x
 end
 # 3、扩展
-Base.:-(x::Variable) = _neg(x)
+Base.:-(x::Var) = _neg(x)
 # 4、求导
 ∇(f::Neg, gy) = -gy
 
@@ -141,12 +152,17 @@ _sub(x, y) = Sub()(x, y) do x, y
     x .- y
 end
 # 3、扩展
-Base.:-(x::Variable, y::Variable) = _sub(x, y)
-Base.:-(x::Variable, y) = _sub(x, y)
-Base.:-(x, y::Variable) = _sub(x, y)
+Base.:-(x::Var, y::Var) = _sub(x, y)
+Base.:-(x::Var, y) = _sub(x, y)
+Base.:-(x, y::Var) = _sub(x, y)
 # 4、求导
 function ∇(f::Sub, gy) 
-    gy, -gy
+    gx1, gx2 = gy, -gy
+    if f.x_shape[1] != f.x_shape[2]
+        gx1 = sumto(gx1, f.x_shape[1])
+        gx2 = sumto(gx2, f.x_shape[2])
+    end
+    return gx1, gx2
 end
 
 # Div
@@ -157,14 +173,18 @@ _div(x, y) = Div()(x, y) do x, y
     x ./ y
 end
 # 3、扩展
-Base.:/(x::Variable, y::Variable) = _div(x, y)
-Base.:/(x::Variable, y) = _div(x, y)
-Base.:/(x, y::Variable) = _div(x, y)
+Base.:/(x::Var, y::Var) = _div(x, y)
+Base.:/(x::Var, y) = _div(x, y)
+Base.:/(x, y::Var) = _div(x, y)
 # 4、求导
 function ∇(f::Div, gy) 
     x1, x2 = f.inputs
     gx1 = gy / x2
     gx2 = gy * (-x1 / x2^2)
+    if f.x_shape[1] != f.x_shape[2]
+        gx1 = sumto(gx1, f.x_shape[1])
+        gx2 = sumto(gx2, f.x_shape[2])
+    end
     return gx1, gx2
 end
 
@@ -176,16 +196,28 @@ _pow(x, c) = Pow(c)(x) do x
     x .^c
 end
 # 3、扩展
-Base.:^(x::Variable, c)  = _pow(x, c)
+Base.:^(x::Var, c)  = _pow(x, c)
+# todo literal_pow(f::typeof(^), x::Judo.Var{Variable}, #unused#::Val{-2})
+
 # 4、求导
-∇(f::Pow, gy) = f.c * f.inputs[1]^(f.c - 1) * gy
+function ∇(f::Pow, gy) 
+    x = f.inputs[1]
+    e = f.c
+    if e == 0
+        nothing
+    elseif e == 1
+        gy
+    else
+        e * x^(e - 1) * gy
+    end
+end
 
 # 求整体导数
-function gradient!(v::Variable; retain_grad=false) 
+function gradient!(v::Var; retain_grad=false)
     # 非函数创建的变量，不求导
     hascreator(v) || return 
-    # 将梯度转换成 `Variable` 类型
-    hasgrad(v) || (v.grad = convert(Variable, one.(v.value))) 
+    # 将梯度转换成 `Var` 类型
+    hasgrad(v) || (v.grad = Literal(one.(v.value))) 
     funcs = Func[] 
     seen_set = Set() 
     
@@ -213,7 +245,11 @@ function gradient!(v::Variable; retain_grad=false)
             else
                 x.grad = gx
             end
-            hascreator(x) && addfunc(x.creator) 
+            if hascreator(x)
+                addfunc(x.creator)  # 中间变量
+            else
+                x isa Var{Literal} && cleargrad!(x) # 清除常量的梯度
+            end
         end
         #-----------------------------------------------------------
         retain_grad || cleargrad!.(f.outputs)

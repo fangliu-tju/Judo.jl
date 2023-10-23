@@ -1,20 +1,41 @@
 # ===================================================================
-# 面向变量 `Variable` 的工具函数
+# 面向变量 `Var` 的工具函数
 # ===================================================================
+# 针对新数据类型， 扩展已有函数的方法
+Base.ndims(v::Var) = ndims(v.value)
+Base.size(v::Var) = size(v.value)
+Base.size(v::Var, i) = size(v.value, i)
+Base.eltype(v::Var)  = eltype(v.value)
+Base.length(v::Var) = length(v.value)
+Base.show(io::IO, v::Var{T}) where T = println(io, "$T(", v.value, ")")
+function Base.show(io::IO, ::MIME"text/plain", v::Var{T}) where T 
+    println(io, "$T\n", v.value)
+end
+
+Base.promote_rule(::Type{Var{Variable}},::Type{Var{Parameter}}) = Var{Variable}
+Base.promote_rule(::Type{Var{Variable}},::Type{Var{Literal}}) = Var{Variable}
+Base.promote_rule(::Type{Var{Parameter}},::Type{Var{Literal}}) = Var{Variable}
+
+Base.convert(::Type{Var{T}},x::Var{T}) where T = x
+Base.convert(::Type{Var{T}},x::Var) where T = T(x.value,name=x.name)
+Base.convert(::Type{Var{T}},x::Union{Number, AbstractArray}) where T = T(x)
+
+# 将非变量型数据转换成变量型数据
+asvariable(obj) = obj isa Var ? obj : Literal(obj)
 # 设置变量的创造者
-function setcreator!(v::Variable, func::Func)
+function setcreator!(v::Var, func::Func)
     v.creator = func
     v.generation = func.generation + 1 
 end
 
 # 清除变量的梯度
-cleargrad!(v::Variable) = (v.grad = nothing)
+cleargrad!(v::Var) = (v.grad = nothing)
 
 # 查询变量属性
-hasvalue(v::Variable) = !isnothing(v.value)
-hasgrad(v::Variable) = !isnothing(v.grad)
-hascreator(v::Variable) = !isnothing(v.creator)
-hasname(v::Variable) = !isnothing(v.name)
+hasvalue(v::Var) = !isnothing(v.value)
+hasgrad(v::Var) = !isnothing(v.grad)
+hascreator(v::Var) = !isnothing(v.creator)
+hasname(v::Var) = !isnothing(v.name)
 
 # ===================================================================
 # 
@@ -31,7 +52,7 @@ end
 # ===================================================================
 # 计算图相关函数
 # ===================================================================
-function _dot_var(v::Variable; verbose=false)
+function _dot_var(v::Var; verbose=false)
     name = hasname(v) ? v.name : ""
     if verbose && hasvalue(v)
         hasname(v) && (name *= ": ")
@@ -91,30 +112,9 @@ function plot_dot_graph(output; verbose=false, file="graph.png")
 end
 
 # ===================================================================
-# sumto / broadcatto
+# 
 # ===================================================================
-function sumto(x::Variable, shape)
-    size(x) == shape && return x
-    lead = ndims(x) - length(shape)
-    dims = Tuple(1:lead)
-    for i = 1:(ndims(x) - lead)
-        if shape[i] == 1 && size(x, i) > 1
-            dims = tuple(dims..., i)
-        end
-    end
-    return sum(x, dims=dims)
-end
 
-broadcastto(x::Variable, shape) = size(x) == shape ? x : x + zeros(eltype(x),shape)
-
-mean_squared_error(x1, x2) = sum((x1-x2).^2) ./ length(x1)
-
-function linear(x,W::Variable,b=nothing)
-    y = x * W
-    isnothing(b) &&  return y
-    y = y .+ b
-    return y
-end
 
 update!(model,opt=SGD(0.01)) = opt(model)
 Base.clamp!(p::Variable, lo, hi) = clamp!(p.data, lo, hi)
@@ -122,7 +122,6 @@ Base.clamp!(p::Variable, lo, hi) = clamp!(p.data, lo, hi)
 # activation function: sigmoid / relu / softmax / log_softmax / leaky_relu
 # ===================================================================
 
-sigmoid(x::Variable) = 0.5 .* tanh(0.5 .* x) .+ 0.5
 
 relu(x::Variable) = max(x, 0) #这个激活函数怎么用，后面还要研究
 

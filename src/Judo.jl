@@ -2,10 +2,14 @@ module Judo
 
 export 
     # core
-    Variable, gradient!, cleargrad!, ⋅,
+    Variable, Parameter, Literal,
+    gradient!, ⋅,
     @inference, @createfunc,
+    # functions
+    broadcastto, sumto, mean_squared_error,
+    affine, sigmoid,
     # utils
-    plot_dot_graph
+    cleargrad!, plot_dot_graph
 
 include("core.jl")
 include("functions.jl")
