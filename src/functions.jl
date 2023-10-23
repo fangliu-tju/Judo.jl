@@ -57,9 +57,11 @@ end
 # ===================================================================
 
 # Reshape
+# 1、创建
 @createfunc Reshape shape::Tuple
+# 2、求值+3、扩展
 Base.reshape(x::Variable, shape::Tuple) = size(x) == shape ? x : Reshape(shape)(x) do x
-    reshape(x.data, shape)
+    reshape(x, shape)
 end
 function Base.reshape(x::Variable, shape...) 
     if length(shape) == 1 && shape[1] isa Union{Tuple,Array}
@@ -67,7 +69,8 @@ function Base.reshape(x::Variable, shape...)
     end
     return reshape(x,tuple(shape...))
 end
-backward(f::Reshape, gy) = reshape(gy, f.x_shape)
+# 4、求导
+∇(f::Reshape, gy) = reshape(gy, f.x_shape)
 
 # Transpose
 # 1、创建
