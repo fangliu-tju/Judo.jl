@@ -31,7 +31,7 @@ mutable struct Var{T<:AbstractVar}
     
     # 内部构造函数， 覆盖默认构造函数
     function Var{T}(data::AbstractArray, name) where T   
-        v = new{T}(data)
+        v = new{T}(convert.(Float64,(data)))
         v.grad = nothing
         v.creator = nothing
         v.generation = 1
@@ -197,7 +197,7 @@ _pow(x, c) = Pow(c)(x) do x
 end
 # 3、扩展
 Base.:^(x::Var, c)  = _pow(x, c)
-# todo literal_pow(f::typeof(^), x::Judo.Var{Variable}, #unused#::Val{-2})
+Base.literal_pow(f::typeof(^), x::Var, ::Val{c}) where c =_pow(x, c)
 
 # 4、求导
 function ∇(f::Pow, gy) 
