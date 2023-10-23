@@ -72,15 +72,16 @@ end
 # 4、求导
 ∇(f::Reshape, gy) = reshape(gy, f.x_shape)
 
-# Transpose
+# Permutedims
 # 1、创建
-@createfunc Transpose
+@createfunc Permutedims shape::Tuple
 # 2、求值+3、扩展
-Base.transpose(x::Variable) = Transpose()(x) do x
-    transpose(x)
+Base.permutedims(x::Variable, shape::Tuple) = Permutedims(shape)(x) do x
+    permutedims(x, shape)
 end
+Base.permutedims(x::Variable,shape::AbstractArray) = permutedims(x, Tuple(shape))
 # 4、求导
-∇(f::Transpose, gy) = transpose(gy)
+∇(f::Permutedims, gy) = permutedims(gy, invperm(f.shape))
 
 # Adjoint
 # 1、创建
@@ -90,7 +91,7 @@ Base.adjoint(x::Variable) = Adjoint()(x) do x
     adjoint(x)
 end
 # 4、求导
-∇(f::Adjoint, gy) = adjoint(gy) # ???
+∇(f::Adjoint, gy) = adjoint(gy) 
 
 
 # ===================================================================
