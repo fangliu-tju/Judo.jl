@@ -198,7 +198,6 @@ end
 # 3、扩展
 Base.:^(x::Var, c)  = _pow(x, c)
 Base.literal_pow(f::typeof(^), x::Var, ::Val{c}) where c =_pow(x, c)
-
 # 4、求导
 function ∇(f::Pow, gy) 
     x = f.inputs[1]
@@ -217,7 +216,7 @@ function gradient!(v::Var; retain_grad=false)
     # 非函数创建的变量，不求导
     hascreator(v) || return 
     # 将梯度转换成 `Var` 类型
-    hasgrad(v) || (v.grad = Literal(one.(v.value))) 
+    hasgrad(v) || (v.grad = Literal(ones(size(v)))) 
     funcs = Func[] 
     seen_set = Set() 
     
@@ -256,3 +255,23 @@ function gradient!(v::Var; retain_grad=false)
     end
 end
 
+# 新定义一个数据类型， 层
+abstract type Layer end
+
+struct Linear <: Layer
+    params::Set
+    items:: Dict
+end
+
+
+function Linear(out_size; in_size=nothing,nobias=false)
+    params = Set{String}()
+    W = Parameter(0,name="W")
+    W.value = isnothing(in_size) ? nothing : randn(in_size,out_size)
+    b = nobias ? nothing : Parameter(zeros(out_size)',name="b")
+    items = Dict(zip(["out_size","in_size","W","b"],[out_size,in_size,W,b]))
+    for (k, v) in items
+        v isa Var{Parameter} && push!(params, k)
+    end
+    Linear(params, items)
+end

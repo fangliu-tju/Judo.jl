@@ -131,7 +131,7 @@ end
 @createfunc BroadcastTo shape 
 # 2、求值+3、扩展
 broadcastto(x::Var, shape) = BroadcastTo(shape)(x) do x
-    size(x) == shape ? x : x .+ zeros(eltype(x), shape)
+    size(x) == shape ? x : x .+ zeros(shape)
 end
 ∇(f::BroadcastTo, gy) = sumto(gy, f.x_shape)
 
