@@ -16,9 +16,23 @@ Base.promote_rule(::Type{Var{Variable}},::Type{Var{Parameter}}) = Var{Variable}
 Base.promote_rule(::Type{Var{Variable}},::Type{Var{Literal}}) = Var{Variable}
 Base.promote_rule(::Type{Var{Parameter}},::Type{Var{Literal}}) = Var{Variable}
 
-Base.convert(::Type{Var{T}},x::Var{T}) where T = x
-Base.convert(::Type{Var{T}},x::Var) where T = T(x.value,name=x.name)
+function Base.convert(::Type{Var{T}},x::Var{S}) where {T, S} 
+    T == S ? x : T(x.value,name=x.name)
+end
 Base.convert(::Type{Var{T}},x::Union{Number, AbstractArray}) where T = T(x)
+
+function Base.getproperty(l::Layer, f::Symbol)
+    if f in [:_items, :_params]
+        getfield(l, f)
+    else
+        getindex(getproperty(l, :_items), f)
+    end
+end
+
+function Base.setproperty!(l::Layer, f::Symbol, v)
+    isa(v, Union{Var{Parameter}, Layer}) && push!(l._params, f)
+    l._items[f] = v    
+end
 
 # 将非变量型数据转换成变量型数据
 asvariable(obj) = obj isa Var ? obj : Literal(obj)
@@ -30,13 +44,49 @@ end
 
 # 清除变量的梯度
 cleargrad!(v::Var) = (v.grad = nothing)
+function cleargrads!(l::Layer)
+    for p in params(l)
+        cleargrad!(p) 
+    end
+end
 
 # 查询变量属性
 hasvalue(v::Var) = !isnothing(v.value)
 hasgrad(v::Var) = !isnothing(v.grad)
 hascreator(v::Var) = !isnothing(v.creator)
 hasname(v::Var) = !isnothing(v.name)
-
+#= 递归版
+function params(l::Layer)  
+    ps = Var{Parameter}[]
+    for p in l._params
+        obj = l._items[p]
+        if isa(obj, Layer)
+            append!(ps, params(obj))
+        else
+            push!(ps, obj)
+        end
+    end
+    ps
+end
+=#
+# 循环版
+function params(l::Layer)
+    ls = [l]
+    ps = Var{Parameter}[]
+    while !isempty(ls)
+        l = pop!(ls)
+        for p in l._params
+            obj = l._items[p]
+            if isa(obj, Layer)
+                push!(ls, obj)
+            else
+                push!(ps, obj)
+            end
+        end
+    end
+    ps
+end
+#
 # ===================================================================
 # 
 # ===================================================================
@@ -111,6 +161,11 @@ function plot_dot_graph(output; verbose=false, file="graph.png")
     run(cmd)
 end
 
+function plot_dot_graph(model::Layer, inputs...; file="model.png")
+    y = model(inputs...)
+    plot_dot_graph(y, verbose=true, file=file)
+end
+
 # ===================================================================
 # 
 # ===================================================================
@@ -141,4 +196,9 @@ function softmax_cross_entropy_simple(x, t)
     log_p = log(p)
     tlog_p = log_p[Colon(),t.data]
     return -sum(tlog_p) ./ length(tlog_p)
+end
+
+function initW!(l)
+    I, O = l.in_size, l.out_size
+    l.W.value = randn(I, O) * sqrt(1/I)
 end
