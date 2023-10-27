@@ -5,6 +5,13 @@ using Random
 using Plots
 Random.seed!(0)
 
+x = rand(100)
+y = sin.(2pi * x) + rand(100)
+
+const lr = 0.2
+const iters = 10000
+hidden_size = 10
+
 # 创建模型
 @createmodel TwoLayerNet
 # 设置模型
@@ -22,38 +29,30 @@ function Judo.evaluation(model::TwoLayerNet, x)
 end
 
 # main
-x = Variable(randn(5, 10), name="x")
-model = TwoLayerNet(100, 10)
-plot_dot_graph(model, x, file="images/twolayernet.png")
+function main()
+    model = TwoLayerNet(hidden_size, 1)
+    #model = MLP((hidden_size,1)) # 更一般的实现
 
-#=
-x = rand(100)
-y = sin.(2pi * x) + rand(100)
+    for i in 1:iters
+        y_pred = model(x)
+        loss = mean_squared_error(y, y_pred)
 
-model = MLP((10,1))
+        cleargrads!(model)
+        @inference gradient!(loss)
 
-const lr = 0.2
-const iters = 10000
-
-for i in 1:iters
-    y_pred = model(x)
-    loss = mean_squared_error(y, y_pred)
-
-    cleargrads!(model)
-    backward!(loss)
-
-    for l in model.layers
-        l.W.data -= lr * l.W.grad.data
-        l.b.data -= lr * l.b.grad.data
-    end
+        for p in params(model)
+            p.value -= lr * p.grad.value
+        end
     
-    if (i-1) % 1000 == 0
-        println(loss)
+        if (i-1) % 1000 == 0
+            println(loss)
+        end
     end
+    # Plot
+    plt = scatter(x, y, marksize=10,xlabel="x", ylabel="y", legend=false)
+    t = 0:0.01:1
+    y_pred = model(t)
+    plot!(plt, t, y_pred.value, color=:red)
 end
-# Plot
-plt = scatter(x, y, marksize=10,xlabel="x", ylabel="y", legend=false)
-t = 0:0.01:1
-y_pred = model(t)
-plot!(plt, t, y_pred.data, color=:red)
-=#
+
+@time main()

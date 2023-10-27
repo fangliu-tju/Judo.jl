@@ -1,4 +1,19 @@
 # ===================================================================
+# Config
+# ===================================================================
+# 全局常量， 根据要不要对函数求导， 设置 `true` 或 `false`, 默认 `true`
+const enable_grad = Ref(true) 
+
+# 只做推理时不求导
+macro inference(ex)
+    quote
+        enable_grad[] = false
+        local val = Base.@__tryfinally($(esc(ex)),
+        enable_grad[] = true);  
+        val
+    end
+end
+# ===================================================================
 # 面向变量 `Var` 的工具函数
 # ===================================================================
 # 针对新数据类型， 扩展已有函数的方法
@@ -71,7 +86,7 @@ end
 =#
 # 循环版
 function params(l::Layer)
-    ls = [l]
+    ls = Layer[l]
     ps = Var{Parameter}[]
     while !isempty(ls)
         l = pop!(ls)
