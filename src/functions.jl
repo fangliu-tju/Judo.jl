@@ -336,29 +336,8 @@ end
 
 
 # ===================================================================
-# isless / sum / sumto / broadcastto / matmul / affine
+#  sum / sumto / broadcastto / matmul 
 # ===================================================================
-# Isless
-# 1、创建
-@createfunc Isless
-# 2、 求值
-_isless(x, y) = Isless()(x, y) do x, y  
-    isless.(x, y)
-end                            
-# 3、 扩展
-Base.:isless(x::Var, y::Var) = _isless(x, y)
-Base.:isless(x, y::Var) = _isless(x, y) 
-Base.:isless(x::Var, y) = _isless(x, y) 
-# 4、求导
-function ∇(f::Isless, gy)  
-    gx1, gx2 = gy, gy
-    if f.x_shape[1] != f.x_shape[2]   
-        gx1 = sumto(gx1, f.x_shape[1])
-        gx2 = sumto(gx2, f.x_shape[2])
-    end
-    return gx1, gx2    
-end
-
 # Sum
 # 1、创建 
 @createfunc Sum dims
@@ -416,6 +395,43 @@ function ∇(f::MatMul, gy)
     return gW, gx
 end
 
+# ===================================================================
+# activation function: sigmoid / relu / softmax / log_softmax / leaky_relu
+# ===================================================================
+
+# Sigmoid
+# 1、创建
+@createfunc Sigmoid 
+# 2、求值+3、扩展
+sigmoid(x) = Sigmoid()(x) do x 
+    0.5tanh.(0.5x) .+ 0.5
+end
+# 4、求导
+function ∇(f::Sigmoid, gy) 
+    y = f.outputs[1]
+    gy * y * (1 - y)
+end
+
+# ReLU
+# 1、创建
+@createfunc ReLU mask
+# 2、求值+3、扩展
+function relu(x)
+    mask = x <= 0
+    ReLU(mask)(x) do x
+        max.(x, 0.0)
+    end
+end
+# 4、求导
+function ∇(f::ReLU, gy)
+    gy[f.mask] = 0.0
+    return gy
+end
+
+# ===================================================================
+# output function: affine / softmax / log_softmax 
+# ===================================================================
+
 # Affine
 # 1、创建
 @createfunc Affine 
@@ -437,59 +453,6 @@ function ∇(f::Affine, gy)
     return gx, gW, gb
 end
 
-
-# ===================================================================
-# loss funtion mean_squared_error / 
-# ===================================================================
-
-# MeanSquaredError
-# 1、创建
-@createfunc MeanSquaredError
-# 2、求值+3、扩展
-mean_squared_error(x1, x2) = MeanSquaredError()(x1, x2) do x1, x2
-    diff = x1 - x2
-    sum(diff.^2) / length(diff)
-end 
-# 4、求导
-function ∇(f::MeanSquaredError, gy)
-    x1, x2 = f.inputs
-    diff = x1 - x2
-    gx1 = gy * diff * (2 / length(diff))
-    gx2 = -gx1
-    return gx1, gx2
-end
-
-# ===================================================================
-# activation function: sigmoid / relu / softmax / log_softmax / leaky_relu
-# ===================================================================
-
-# Sigmoid
-# 1、创建
-@createfunc Sigmoid 
-# 2、求值+3、扩展
-sigmoid(x) = Sigmoid()(x) do x 
-    0.5tanh.(0.5x) .+ 0.5
-end
-# 4、求导
-function ∇(f::Sigmoid, gy) 
-    y = f.outputs[1]
-    gy * y * (1 - y)
-end
-
-# ReLU
-# 1、创建
-@createfunc ReLU 
-# 2、求值+3、扩展
-relu(x) = ReLU()(x) do x
-    max.(x, 0.0)
-end
-# 4、求导
-function ∇(f::ReLU, gy)
-    x = f.inputs[1]
-    mask = x > 0
-    gy * mask
-end
-
 # Softmax
 # 1、创建
 @createfunc Softmax dims 
@@ -500,34 +463,17 @@ softmax(x; dims=2) = Softmax(dims)(x) do x
     y ./ sum(y, dims=dims)
 end
 # 4、求导
-function ∇(f::Softmax, gy) # 还没有定义完！！！
+function ∇(f::Softmax, gy) 
     y = f.outputs[1]
+    gx = y * gy
+    sumdx = sum(gx, dims=f.dims)
+    gx -= y * sumdx
+    return gx
 end
 
 #=
 
 
-class Softmax(Function):
-    def __init__(self, axis=1):
-        self.axis = axis
-
-    def forward(self, x):
-        xp = cuda.get_array_module(x)
-        y = x - x.max(axis=self.axis, keepdims=True)
-        y = xp.exp(y)
-        y /= y.sum(axis=self.axis, keepdims=True)
-        return y
-
-    def backward(self, gy):
-        y = self.outputs[0]()
-        gx = y * gy
-        sumdx = gx.sum(axis=self.axis, keepdims=True)
-        gx -= y * sumdx
-        return gx
-
-
-def softmax(x, axis=1):
-    return Softmax(axis)(x)
 
 
 class LogSoftmax(Function):
@@ -570,25 +516,44 @@ def leaky_relu(x, slope=0.2):
     return LeakyReLU(slope)(x)
 =#
 
-# Max
-@createfunc Max
-backward(f::Max, gy) = begin #该函数的实现是不合理的，后面需要改进
-    x1, x2 = f.inputs
-    y = f.outputs[1]
-    ET = eltype(gy)
-    T = typeof(gy)
-    gx1 = T(ET.(x1.data .== y.data))
-    gx2 = T(ET.(x2.data .== y.data))
-    if f.x_shape[1] != f.x_shape[2]    # 当维数不一样时，需要累加运算
-        gx1 = sumto(gx1, f.x_shape[1])
-        gx2 = sumto(gx2, f.x_shape[2])
-    end
+# ===================================================================
+# loss funtion mean_squared_error / softmax_cross_entropy
+# ===================================================================
 
+# MeanSquaredError
+# 1、创建
+@createfunc MeanSquaredError
+# 2、求值+3、扩展
+mean_squared_error(x1, x2) = MeanSquaredError()(x1, x2) do x1, x2
+    diff = x1 - x2
+    sum(diff.^2) / length(diff)
+end 
+# 4、求导
+function ∇(f::MeanSquaredError, gy)
+    x1, x2 = f.inputs
+    diff = x1 - x2
+    gx1 = gy * diff * (2 / length(diff))
+    gx2 = -gx1
     return gx1, gx2
 end
-varmax(x1, x2) = Max()(x1, x2) do x1, x2
-    max.(x1.data, x2.data)
+
+# SoftmaxCrossEntropy 
+# 1、创建
+@createfunc SoftmaxCrossEntropy 
+# 2、求值+3、扩展
+softmax_cross_entropy(x, t; dims=2) = SoftmaxCrossEntropy()(x, t, dims) do x, t, dims
+    N = first(size(x)) # 取出数据的个数
+    log_z = logsumexp(x, dims=dims)
+    log_p = x .- log_z
+    log_p = [log_p[i,j] for (i,j) in zip(1:N, t)]
+    return -sum(log_p) / N
 end
-Base.max(x::Variable, y::Variable) = varmax(x, y)
-Base.max(x::Variable, y) = varmax(x, y)
-Base.max(x, y::Variable) = varmax(x, y)
+# 4、求导
+function ∇(f::SoftmaxCrossEntropy, gy)
+    x, t = f.inputs
+    N, C = f.x_shape[1]
+    gy *= 1/N
+    y = softmax(x)
+    t_onehot = BitArray(y == t.value[x] for x in 1:N, y in 1:C)
+    return (y - t_onehot) * gy
+end

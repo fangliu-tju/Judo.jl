@@ -18,7 +18,7 @@ mutable struct Var{T<:AbstractVar}
     
     # 内部构造函数， 覆盖默认构造函数
     function Var{T}(data::AbstractArray, name) where T   
-        v = new{T}(convert.(Float64,(data)))
+        v = new{T}(data)
         v.grad = nothing
         v.creator = nothing
         v.generation = 1

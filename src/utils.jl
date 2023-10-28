@@ -36,6 +36,8 @@ function Base.convert(::Type{Var{T}},x::Var{S}) where {T, S}
 end
 Base.convert(::Type{Var{T}},x::Union{Number, AbstractArray}) where T = T(x)
 
+Base.setindex!(x::Var, v, inds...) = x.value[inds...] .= v
+
 function Base.getproperty(l::Layer, f::Symbol)
     if f in [:_items, :_params]
         getfield(l, f)
@@ -48,6 +50,19 @@ function Base.setproperty!(l::Layer, f::Symbol, v)
     isa(v, Union{Var{Parameter}, Layer}) && push!(l._params, f)
     l._items[f] = v    
 end
+
+Base.isless(x::Var, y::Var) = isless.(x.value, y.value)
+Base.isless(x, y::Var) = isless.(x, y.value) 
+Base.isless(x::Var, y) = isless.(x.value, y) 
+
+Base.:(==)(x::Var, y::Var) = x.value .== y.value
+Base.:(==)(x, y::Var) = x .== y.value 
+Base.:(==)(x::Var, y) = x.value .== y 
+
+Base.:(<=)(x::Var, y::Var) = (x < y) .| (x == y)
+Base.:(<=)(x::Var, y) = (x < y) .| (x == y)
+Base.:(<=)(x, y::Var) = (x < y) .| (x == y)
+
 
 # 将非变量型数据转换成变量型数据
 asvariable(obj) = obj isa Var ? obj : Literal(obj)
@@ -216,4 +231,14 @@ end
 function initW!(l)
     I, O = l.in_size, l.out_size
     l.W.value = randn(I, O) * sqrt(1/I)
+end
+
+# 求 log(Σeˣ): log(Σeˣ) = log(Σexp(x-xₘₐₓ)) + xₘₐₓ      
+function logsumexp(x; dims=2) # x 是数组
+    xₘ = maximum(x, dims=dims) # 返回每行数据的最大值， 即单个数据的最大元素
+    y = x .- xₘ  # 对输入数据进行归一化处理， 防止进行指数运算时溢出
+    y = exp.(y) # 对元素求指数
+    s = sum(y, dims=dims) # 求每组数据的元素和
+    s = log.(s)
+    return s + xₘ
 end

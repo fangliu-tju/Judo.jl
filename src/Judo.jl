@@ -1,5 +1,5 @@
 module Judo
-
+using Random
 export 
     # variables.jl
     Variable, Parameter, Literal, 
@@ -7,7 +7,7 @@ export
     # functions.jl
     broadcastto, sumto, mean_squared_error,
     affine, sigmoid, gradient!, ⋅,
-    relu, softmax,
+    relu, softmax, softmax_cross_entropy,
     @inference, @createfunc, 
 
     # layers.jl
@@ -19,12 +19,16 @@ export
 
     # utils.jl
     cleargrad!, cleargrads!, plot_dot_graph,
-    params
+    params,
+
+    # datasets.jl
+    @createdata, Spiral
 
 include("variables.jl")
 include("functions.jl")
 include("layers.jl")
 include("optimizer.jl")
 include("utils.jl")
+include("datasets.jl")
 
 end
