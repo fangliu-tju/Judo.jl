@@ -35,8 +35,22 @@ function Base.convert(::Type{Var{T}},x::Var{S}) where {T, S}
     T == S ? x : T(x.value,name=x.name)
 end
 Base.convert(::Type{Var{T}},x::Union{Number, AbstractArray}) where T = T(x)
-
 Base.setindex!(x::Var, v, inds...) = x.value[inds...] .= v
+
+Base.ndims(d::Dataset) = ndims(d.data)
+Base.size(d::Dataset) = size(d.data)
+Base.size(d::Dataset, i) = size(d.data, i)
+Base.eltype(d::Dataset)  = eltype(d.data)
+Base.length(d::Dataset) = length(d.data)
+function Base.getindex(d::Dataset, index)
+    if isnothing(d.label)
+        return d.transform.(d.data[index,:]),nothing
+    else
+        return d.transform.(d.data[index,:]), d.target_transform.(d.label[index])
+    end
+end
+
+
 
 function Base.getproperty(l::Layer, f::Symbol)
     if f in [:_items, :_params]
@@ -241,4 +255,27 @@ function logsumexp(x; dims=2) # x 是数组
     s = sum(y, dims=dims) # 求每组数据的元素和
     s = log.(s)
     return s + xₘ
+end
+
+function Base.iterate(dl::DataLoader)
+    batch_size = dl.batch_size
+    batch_index = dl.index[1:batch_size]
+    return dl.dataset[batch_index], 2
+end
+function Base.iterate(dl::DataLoader, i)
+    if i > dl.max_iter
+        dl.shuffle && (dl.index[:] = randperm(dl.data_size))
+        return nothing
+    end
+    batch_size = dl.batch_size
+    batch_index = dl.index[(i-1)*batch_size+1 : i*batch_size]
+    return dl.dataset[batch_index], i+1
+end
+
+function accuracy(y, t)
+    y, t = asvariable(y), asvariable(t)
+    data_num = size(y,1)
+    pred = [argmax(y.value[i,:]) for i in 1:data_num]
+    result = (pred .== t.value)
+    return sum(result) / data_num
 end

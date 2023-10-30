@@ -19,16 +19,20 @@ export
 
     # utils.jl
     cleargrad!, cleargrads!, plot_dot_graph,
-    params,
+    params, accuracy, 
 
     # datasets.jl
-    @createdata, Spiral
+    get_spiral, @createdata, Spiral,
+
+    # dataloaders.jl
+    @createloader, RndDataLoader
 
 include("variables.jl")
 include("functions.jl")
 include("layers.jl")
 include("optimizer.jl")
-include("utils.jl")
 include("datasets.jl")
+include("dataloaders.jl")
+include("utils.jl")
 
 end

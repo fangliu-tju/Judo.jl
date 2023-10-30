@@ -13,7 +13,7 @@ macro createdata(name)
             data
             label
             function $(esc(name))(;train=true, transform=identity, target_transform=identity)
-                data, label = prepare($(esc(name)),train)
+                data, label = _prepare($(esc(name)),train)
                 new(train,transform,target_transform,data,label)
             end
         end
@@ -21,7 +21,9 @@ macro createdata(name)
 end
 
 @createdata Spiral
-function prepare(::Type{Spiral},train=false)
+_prepare(::Type{Spiral},train) = get_spiral(train=train)
+
+function get_spiral(;train=true)
     seed = train ? 1984 : 2020
     Random.seed!(seed)
            
@@ -41,7 +43,9 @@ function prepare(::Type{Spiral},train=false)
         end
     end
     indices = randperm(data_size)
+    x = [x[i,j] for i in indices, j in 1:input_dim ]
     t = t[indices]
-    Base.permutecols!!(x',indices)
+    #Base.permutecols!!(x',indices)
     return x, t
 end
+
