@@ -49,3 +49,37 @@ function get_spiral(;train=true)
     return x, t
 end
 
+@createdata MNIST 
+function _prepare(::Type{MNIST},train)
+    url = "http://yann.lecun.com/exdb/mnist/" 
+    train_files = Dict("target"=>"train-images-idx3-ubyte.gz",
+                        "label"=>"train-labels-idx1-ubyte.gz")
+    test_files = Dict("target"=>"t10k-images-idx3-ubyte.gz",
+                      "label"=>"t10k-labels-idx1-ubyte.gz")
+    
+    files = train ? train_files : test_files
+    data_path = get_file(url * files["target"])
+    label_path = get_file(url * files["label"])
+    return _load_data(data_path), _load_label(label_path)
+end
+
+function _load_label(filepath)
+    GZip.open(filepath) do io
+        skip(io, 8)
+        Int.(read(io))
+    end
+end
+
+function _load_data(filepath)
+    total_items, nrows, ncols, data = 
+    GZip.open(filepath) do io
+        skip(io, 4)
+        return (
+        Int(bswap(read(io, UInt32))),
+        Int(bswap(read(io, UInt32))),
+        Int(bswap(read(io, UInt32))),
+        Float64.(read(io))
+        )
+    end
+    reshape(data,nrows*ncols,total_items)'
+end

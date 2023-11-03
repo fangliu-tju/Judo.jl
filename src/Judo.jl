@@ -1,5 +1,6 @@
 module Judo
 using Random
+using GZip
 export 
     # variables.jl
     Variable, Parameter, Literal, 
@@ -22,7 +23,7 @@ export
     params, accuracy, 
 
     # datasets.jl
-    get_spiral, @createdata, Spiral,
+    get_spiral, @createdata, Spiral, MNIST,
 
     # dataloaders.jl
     @createloader, RndDataLoader

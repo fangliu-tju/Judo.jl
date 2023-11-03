@@ -4,6 +4,8 @@
 # 全局常量， 根据要不要对函数求导， 设置 `true` 或 `false`, 默认 `true`
 const enable_grad = Ref(true) 
 
+const cache_dir = expanduser("~/.judo")
+
 # 只做推理时不求导
 macro inference(ex)
     quote
@@ -43,6 +45,7 @@ Base.size(d::Dataset, i) = size(d.data, i)
 Base.eltype(d::Dataset)  = eltype(d.data)
 Base.length(d::Dataset) = length(d.data)
 function Base.getindex(d::Dataset, index)
+    dims = ndims(d.data)
     if isnothing(d.label)
         return d.transform.(d.data[index,:]),nothing
     else
@@ -278,4 +281,40 @@ function accuracy(y, t)
     pred = [argmax(y.value[i,:]) for i in 1:data_num]
     result = (pred .== t.value)
     return sum(result) / data_num
+end
+
+# ===================================================================
+# download function
+# ===================================================================
+
+"""Download a file from the `url` if it is not in the cache.
+
+The file at the `url` is downloaded to the `~/.judo`.
+
+Args:
+    url (str): URL of the file.
+    file_name (str): Name of the file. If `Nothing` is specified the original file name is used.
+
+Returns:
+    str: Absolute path to the saved file.
+"""
+function get_file(url, file_name=nothing)
+
+    if isnothing(file_name)
+        file_name = url[findlast('/',url)+1:end]
+    end
+    file_path = joinpath(cache_dir, file_name)
+
+    if !isdir(cache_dir)
+        mkdir(cache_dir)
+    end
+    if isfile(file_path)
+        return file_path
+    end
+
+    println("Downloading: " * file_name)
+    download(url,file_path)
+    println(" Done")
+
+    return file_path
 end

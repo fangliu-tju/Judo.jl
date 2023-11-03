@@ -4,6 +4,7 @@ authors = ["Fang Liu <fangliu@tju.edu.cn> and contributors"]
 version = "1.0.0-DEV"
 
 [deps]
+GZip = "92fee26a-97fe-5a0c-ad85-20a5f3185b63"
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 
 [compat]
